@@ -1,6 +1,6 @@
 from datetime import datetime
 from dataclasses import dataclass
-from typing import Dict, Set
+from typing import List, Dict, Set
 from tqdm import tqdm
 import operator
 import functools
@@ -14,12 +14,10 @@ INPUT_FILE = "example.txt" if IS_EXAMPLE else "input.txt"
 class Vector2:
     x: int
     y: int
-
-    def __add__(a, b):
-        return Vector2(a.x + b.x, a.y + b.y)
-
-    def __sub__(a, b):
-        return Vector2(a.x - b.x, a.y - b.y)
+    def __neg__(a): return Vector2(-a.x, -a.y)
+    def __add__(a, b): return Vector2(a.x + b.x, a.y + b.y)
+    def __sub__(a, b): return Vector2(a.x - b.x, a.y - b.y)
+    def rotated_ccw(a): return Vector2(a.y, -a.x)
 
 @dataclass
 class InputData:
