@@ -7,10 +7,24 @@ import functools
 import itertools
 import math
 
+# import heapq
+#
+# search_visited = set()
+# search_queue = [(0, start_state)]
+# heapq.heapify(search_queue)
+#
+# while len(search_queue) > 0:
+#     (cur_cost, cur_state) = heapq.heappop(search_queue)
+#     if cur_state in search_visited: continue
+#     search_visited.add(cur_state)
+#
+#     for next_state in next_states:
+#         heapq.heappush(search_queue, (next_cost, next_state))
+
 IS_EXAMPLE = True
 INPUT_FILE = "example.txt" if IS_EXAMPLE else "input.txt"
 
-@dataclass(slots=True, eq=True, frozen=True)
+@dataclass(slots=True, frozen=True, eq=True, order=True)
 class Vector2:
     x: int
     y: int
