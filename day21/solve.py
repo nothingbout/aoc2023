@@ -180,49 +180,6 @@ def test_edge_distance_assumption(input_data: InputData, max_expansion: int) -> 
                     return False
     return True
 
-def find_possible_positions_for_grid(input_data: InputData, start_pos: Vector2, grid_bounds: (Vector2, Vector2), target_steps_count: int, show_progress: bool) -> (int, int):
-
-    min_bounds, max_bounds = grid_bounds
-
-    if start_pos.y == min_bounds.y or start_pos.y == max_bounds.y - 1: start_pos_edge_offset = Vector2(1, 0)
-    elif start_pos.x == min_bounds.x or start_pos.x == max_bounds.x - 1: start_pos_edge_offset = Vector2(0, 1)
-    else: start_pos_edge_offset = None
-
-    even_positions = set([start_pos])
-    odd_positions = set()
-
-    steps_done = 0
-
-    steps_range = range(target_steps_count)
-    if show_progress: steps_range = tqdm(steps_range)
-    for step in steps_range:
-        cur_positions = even_positions if step % 2 == 0 else odd_positions
-        next_positions = odd_positions if step % 2 == 0 else even_positions
-
-        added_cur_pos = False
-        if step > 0 and start_pos_edge_offset is not None:
-            for dir in [-1, 1]:
-                edge_pos = start_pos + start_pos_edge_offset * (step * dir)
-                if in_bounds(edge_pos, grid_bounds):
-                    cur_positions.add(edge_pos)
-                    added_cur_pos = True
-
-        prev_next_count = len(next_positions)
-
-        for cur_pos in cur_positions:
-            for next_pos in get_neighbors(cur_pos):
-                if not in_bounds(next_pos, grid_bounds): continue
-                if input_data.get(input_data.wrap(next_pos)) != ".": continue
-                next_positions.add(next_pos)
-
-        if not added_cur_pos and len(next_positions) == prev_next_count: 
-            break # can break early
-
-        steps_done += 1
-
-    final_positions = even_positions if target_steps_count % 2 == 0 else odd_positions
-    return steps_done, len(final_positions)
-
 def grid_get(grid_bounds, rows, pos):
     min_bounds, max_bounds = grid_bounds
     return rows[pos.y - min_bounds.y][pos.x - min_bounds.x]
@@ -231,7 +188,7 @@ def grid_set(grid_bounds, rows, pos, value):
     min_bounds, max_bounds = grid_bounds
     rows[pos.y - min_bounds.y][pos.x - min_bounds.x] = value
 
-def find_possible_positions_for_grid_faster(input_data: InputData, start_pos: Vector2, grid_bounds: (Vector2, Vector2), target_steps_count: int, show_progress: bool) -> (int, int):
+def search_all_possible_positions_with_steps_fast(input_data: InputData, start_pos: Vector2, grid_bounds: (Vector2, Vector2), target_steps_count: int, show_progress: bool = False) -> (int, int):
 
     min_bounds, max_bounds = grid_bounds
 
@@ -262,7 +219,7 @@ def find_possible_positions_for_grid_faster(input_data: InputData, start_pos: Ve
                 grid_set(grid_bounds, visited_grid, next_pos, True)
                 next_positions.append(next_pos)
 
-        if len(next_positions) == 0: 
+        if len(next_positions) == 0 and steps_done % 2 == target_steps_count % 2: 
             break # can break early
 
         cur_positions = next_positions
@@ -271,21 +228,13 @@ def find_possible_positions_for_grid_faster(input_data: InputData, start_pos: Ve
     final_pos_count = even_pos_count if target_steps_count % 2 == 0 else odd_pos_count
     return steps_done, final_pos_count
 
-def get_all_grid_indexes_for_bruteforce(target_steps_count: int) -> [Vector2]:
-    max_expansion = 5 + target_steps_count // min(input_data.grid_size.x, input_data.grid_size.y)
+@dataclass
+class Cache:
+    position_counts: Dict
+    max_steps_to_fill: Dict
 
-    grid_indexes = []
-    for grid_y in range(-max_expansion, max_expansion + 1):
-        for grid_x in range(-max_expansion, max_expansion + 1):
-            grid_indexes.append(Vector2(grid_x, grid_y))
-
-    return grid_indexes
-
-def solve_grid_based(input_data: InputData, grid_indexes: [Vector2], target_steps_count: int, show_progress: bool, print_debug: bool) -> int:
+def get_possible_positions_for_grids_cached(input_data: InputData, cache: Cache, grid_indexes: [Vector2], target_steps_count: int, show_progress: bool = False) -> int:
     final_positions_count = 0
-
-    cached_grid_position_counts = {}
-    cached_max_steps_to_fill = {}
 
     if show_progress: grid_indexes = tqdm(grid_indexes)
 
@@ -299,43 +248,69 @@ def solve_grid_based(input_data: InputData, grid_indexes: [Vector2], target_step
 
         relative_start_pos = start_pos - grid_bounds[0]
         remaining_steps_is_odd = remaining_steps % 2 == 1
-        max_steps_to_fill = cached_max_steps_to_fill.get((relative_start_pos, remaining_steps_is_odd), 100000000)
+        max_steps_to_fill = cache.max_steps_to_fill.get((relative_start_pos, remaining_steps_is_odd), 100000000)
 
         cache_key = (relative_start_pos, remaining_steps_is_odd, min(remaining_steps, max_steps_to_fill))
-        grid_positions_count = cached_grid_position_counts.get(cache_key, None)
-
-        if print_debug:
-            print(f"{grid_idx=}, {start_pos=}, {remaining_steps=}, {cache_key=}")
+        grid_positions_count = cache.position_counts.get(cache_key, None)
 
         if grid_positions_count is None:
-            steps_done, grid_positions_count = find_possible_positions_for_grid_faster(input_data, start_pos, grid_bounds, remaining_steps, False)
+            steps_done, grid_positions_count = search_all_possible_positions_with_steps_fast(input_data, start_pos, grid_bounds, remaining_steps, False)
 
-            if print_debug:
-                print(f"calculated: {grid_positions_count}, {remaining_steps=}, {steps_done=}")
-
-            # cached_count = cached_grid_position_counts.get(cache_key, None)
-            # print(f"Get cache: {cache_key} = {cached_count}")
-            # if cached_count is not None and cached_count != grid_positions_count:
-            #     print(f"CACHE ERROR: {cached_count=}")
-            #     return 0
-
+            # if didn't need all remaining steps to fill the grid, adjust cache key
             if steps_done < remaining_steps:
-                cached_max_steps_to_fill[(relative_start_pos, remaining_steps_is_odd)] = steps_done
+                cache.max_steps_to_fill[(relative_start_pos, remaining_steps_is_odd)] = steps_done
                 cache_key = (relative_start_pos, remaining_steps_is_odd, steps_done)
 
-            cached_grid_position_counts[cache_key] = grid_positions_count
-            # print(f"Set cache: {cache_key} = {grid_positions_count}")
-
-        elif print_debug:
-            print(f"from cache: {grid_positions_count}")
+            cache.position_counts[cache_key] = grid_positions_count
 
         final_positions_count += grid_positions_count
 
     return final_positions_count
 
+def solve_grid_based_bruteforce(input_data: InputData, target_steps_count: int) -> int:
+    max_expansion = 1 + target_steps_count // min(input_data.grid_size.x, input_data.grid_size.y)
+
+    grid_indexes = []
+    for grid_y in range(-max_expansion, max_expansion + 1):
+        for grid_x in range(-max_expansion, max_expansion + 1):
+            grid_indexes.append(Vector2(grid_x, grid_y))
+
+    cache = Cache({}, {})
+    final_positions_count = get_possible_positions_for_grids_cached(input_data, cache, grid_indexes, target_steps_count, True, False)
+    return final_positions_count
+
+def solve_grid_based_optimized(input_data: InputData, target_steps_count: int) -> int:
+
+    max_edge_expansion = 1 + target_steps_count // min(input_data.grid_size.x, input_data.grid_size.y)
+
+    _, even_filled_count = search_all_possible_positions_with_steps_fast(input_data, Vector2(0, 0), (Vector2(0, 0), input_data.grid_size), 100000000)
+    _, odd_filled_count = search_all_possible_positions_with_steps_fast(input_data, Vector2(0, 0), (Vector2(0, 0), input_data.grid_size), 100000001)
+
+    final_count = 0
+    cache = Cache({}, {})
+
+    for grid_y in tqdm(range(-max_edge_expansion, max_edge_expansion + 1)):
+
+        xee_max = max_edge_expansion - abs(grid_y)
+        xee_min = xee_max - 2
+
+        if xee_min <= 0:
+            final_count += get_possible_positions_for_grids_cached(input_data, cache, [Vector2(grid_x, grid_y) for grid_x in range(-xee_max, xee_max + 1)], target_steps_count)
+        else:
+            final_count += get_possible_positions_for_grids_cached(input_data, cache, [Vector2(grid_x, grid_y) for grid_x in range(-xee_max, -xee_min + 1)], target_steps_count)
+            final_count += get_possible_positions_for_grids_cached(input_data, cache, [Vector2(grid_x, grid_y) for grid_x in range(xee_min, xee_max + 1)], target_steps_count)
+
+            if grid_y % 2 == target_steps_count % 2:
+                final_count += (1 + 2 * ((xee_min - 1) // 2)) * even_filled_count
+                final_count += 2 * (xee_min // 2) * odd_filled_count
+            else:
+                final_count += (1 + 2 * ((xee_min - 1) // 2)) * odd_filled_count
+                final_count += 2 * (xee_min // 2) * even_filled_count
+
+    return final_count
+
 def do_part2(input_data: InputData):
     target_steps_count = 100 if IS_EXAMPLE else 26501365
-    grid_size = input_data.grid_size
 
     # print(f"Test edge distance assumption: {test_edge_distance_assumption(input_data, 3)}")
 
@@ -344,17 +319,20 @@ def do_part2(input_data: InputData):
     # Steps: 300, bruteforce solution: 77106
 
     # test_steps = 300
-    # test_bounds = get_test_bounds(grid_size, Vector2(-10, -10), Vector2(20, 20))
+    # test_bounds = get_test_bounds(input_data.grid_size, Vector2(-10, -10), Vector2(20, 20))
     # steps_done, test_positions_count = find_possible_positions_for_grid_faster(input_data, input_data.start_pos, test_bounds, test_steps, True)
     # print(f"{test_steps=}, {steps_done=} answer: {test_positions_count}")
 
-    steps = 7000
-    final_positions_count = solve_grid_based(input_data, get_all_grid_indexes_for_bruteforce(steps), steps, True, False)
     # Steps 500, answer: 214365
     # Steps 600, answer: 308952
     # Steps 700: answer: 418949
     # Steps 800, answer: 547639
-    # Steps 7000, answer: (41847781?)
+    # Steps 7000, answer: 41847781
+    # Steps 100000: answer: 8539781752
+
+    # final_positions_count = solve_grid_based_bruteforce(input_data, 300)
+    
+    final_positions_count = solve_grid_based_optimized(input_data, target_steps_count)
 
     print(f"part2: {final_positions_count}")
 
