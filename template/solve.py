@@ -31,7 +31,34 @@ class Vector2:
     def __neg__(a): return Vector2(-a.x, -a.y)
     def __add__(a, b): return Vector2(a.x + b.x, a.y + b.y)
     def __sub__(a, b): return Vector2(a.x - b.x, a.y - b.y)
+    def __mul__(a, s): return Vector2(a.x * s, a.y * s)
     def rotated_ccw(a): return Vector2(a.y, -a.x)
+    def abs(a): return Vector2(abs(a.x), abs(a.y))
+    def sum(a): return a.x + a.y
+    def scaled(a, b): return Vector2(a.x * b.x, a.y * b.y)
+    def min(a, b): return Vector2(min(a.x, b.x), min(a.y, b.y))
+    def max(a, b): return Vector2(max(a.x, b.x), max(a.y, b.y))
+
+    def __str__(a): return f"({a.x}, {a.y})"
+    def __repr__(a): return str(a)
+
+@dataclass(slots=True, frozen=True, eq=True, order=True)
+class Vector3:
+    x: int
+    y: int
+    z: int
+    def __neg__(a): return Vector3(-a.x, -a.y, -a.z)
+    def __add__(a, b): return Vector3(a.x + b.x, a.y + b.y, a.z + b.z)
+    def __sub__(a, b): return Vector3(a.x - b.x, a.y - b.y, a.z - b.z)
+    def __mul__(a, s): return Vector3(a.x * s, a.y * s, a.z * s)
+    def abs(a): return Vector3(abs(a.x), abs(a.y), abs(a.z))
+    def sum(a): return a.x + a.y + a.z
+    def scaled(a, b): return Vector3(a.x * b.x, a.y * b.y, a.z * b.z)
+    def min(a, b): return Vector3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z))
+    def max(a, b): return Vector3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z))
+
+    def __str__(a): return f"({a.x}, {a.y}, {a.z})"
+    def __repr__(a): return str(a)
 
 @dataclass
 class InputData:
